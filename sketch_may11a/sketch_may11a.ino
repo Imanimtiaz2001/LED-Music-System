@@ -3,6 +3,7 @@ int LED=2;
 void setup() {
   // put your setup code here, to run once:
 //set the led on esp32 as output
+  //set the led on esp32 as output
 pinMode(LED ,OUTPUT);
 }
 
