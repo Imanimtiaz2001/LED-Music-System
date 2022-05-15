@@ -1,42 +1,117 @@
-/*
- WiFi Web Server LED Blink
-
- A simple web server that lets you blink an LED via the web.
- This sketch will print the IP address of your WiFi Shield (once connected)
- to the Serial monitor. From there, you can open that address in a web browser
- to turn on and off the LED on pin 5.
-
- If the IP address of your shield is yourAddress:
- http://yourAddress/H turns the LED on
- http://yourAddress/L turns it off
-
- This example is written for a network using WPA encryption. For
- WEP or WPA, change the Wifi.begin() call accordingly.
-
- Circuit:
- * WiFi shield attached
- * LED attached to pin 5
-
- created for arduino 25 Nov 2012
- by Tom Igoe
-
-ported for sparkfun esp32 
-31.01.2017 by Jan Hendrik Berlin
- 
- */
-
 #include <WiFi.h>
+#include <WebServer.h>
 
 const char* ssid     = "Redmi9C";
-const char* password = "bisma42001";
+const char* password = "Redmi9CC";
 
 WiFiServer server(80);
 //led on esp32
 int LED=2;
  // put your setup code here, to run once:
+char webpage[] PROGRAM=R"=====(
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>How To Play Video Audio In Html5 Example</title>
+<script type="text/javascript" > var audioElementId = 'audio1';
+    var audioFileURLId = 'audioFileURL';
+    var playAudioBtnId = 'playAudioBtn';
+    var pauseAudioBtnId = 'pauseAudioBtn';
+    var stopAudioBtnId = 'stopAudioBtn';
+    var outputElementId = 'output1';
+    function initialize(){
+        initialize_video();
+        initialize_audio();
+        
+    }function initialize_audio(){
+        audioElement = document.getElementById(audioElementId);
+        audioElement.style.display = 'none';
+        outputElement = document.getElementById(outputElementId);
+        audioElement.addEventListener("ended", function(){
+            message = "Play audio finish.";
+            alert(message);
+            outputElement.value = message;
+        });
+        // Add time update event listener.
+        audioElement.addEventListener("timeupdate", function(){
+            var audioPlayStatus = "Playing ";
+            var audioPlayTime = audioElement.currentTime;
+            var audioDuration = audioElement.duration;
+            audioPlayStatus += Math.floor(audioPlayTime) + ' seconds / Total ' + Math.floor(audioDuration) +' seconds'
+                
+            outputElement.value = audioPlayStatus;
+        
+        });
+        
+        playAudioBtnElement = document.getElementById(playAudioBtnId);
+        playAudioBtnElement.disabled = false;
+        pauseAudioBtnElement = document.getElementById(pauseAudioBtnId);
+        pauseAudioBtnElement.disabled = true;
+        stopAudioBtnElement = document.getElementById(stopAudioBtnId);
+        stopAudioBtnElement.disabled = true;
+    }
+    
+    function playAudio(src){
+        //https://dev2qa.com/demo/media/test.mp3
+        audioFileURLInput = document.getElementById(audioFileURLId);
+        audioFileURLStr = audioFileURLInput.value;
+        if('' == audioFileURLStr){
+            alert('Please input audio file URL first.');
+        }else{
+            document.getElementById("demo").innerHTML = "Audio Played" ;
+            audioElement = document.getElementById(audioElementId);
+            audioElement.style.display = 'block';
+            audioElement.src = audioFileURLStr;
+            audioElement.play();
+            outputElement = document.getElementById(outputElementId);
+            outputElement.style.display = 'block';
+            src.disabled = true;
+            pauseAudioBtnElement = document.getElementById(pauseAudioBtnId);
+            pauseAudioBtnElement.disabled = false;
+            stopAudioBtnElement = document.getElementById(stopAudioBtnId);
+            stopAudioBtnElement.disabled = false;
+        }
+    }
+    function pauseAudio(src){
+        audioElement = document.getElementById(audioElementId);
+        btnText = src.value.toLowerCase();
+        if(btnText == 'pause audio'){
+            document.getElementById("demo").innerHTML = "Audio Paused" ;
+            audioElement.pause();
+            src.value = 'Continue Audio';
+        }else if(btnText == 'continue audio'){
+            document.getElementById("demo").innerHTML = "Audio Played" ;
+            audioElement.play();
+            src.value = 'Pause Audio';
+        }
+    }
+    </script>
+</head>
+<body onload="initialize()">
+<h3>How To Play Video Audio In Html5 Example.</h3>
+<div style="display:block;margin-top: 10px;">
+    <label>Input Audio File URL:</label>
+    <input type="text" id="audioFileURL"/>
+    <input type="button" id="playAudioBtn" value="Play Audio" onclick=playAudio(this) />
+    <input type="button" id="pauseAudioBtn" value="Pause Audio" onclick=pauseAudio(this) />
+</div>
+<output id="output2" style="display:block;margin-top: 10px;"></output>
+<audio id="audio1" style="display:block;margin-top: 10px;" controls></audio>
+<p id="demo"></p>
+</body>
+</html>
+)=====";
 void setup()
 {
+  pinMode(LED ,OUTPUT);
+  Wifi.begin(ssid,password);
     Serial.begin(115200);
+    while(WiFi.status()!=WL_CONNECTED)
+    {
+     delay(500);}
+     
   //set the led on esp32 as output
 pinMode(LED ,OUTPUT);
     delay(10);
@@ -60,61 +135,21 @@ pinMode(LED ,OUTPUT);
     Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
     
+    server.on("/",[](){server.send(200,"text/html",webpage);});
+  server.on("/ledstate",getLEDState);
     server.begin();
 
 }
 
-int value = 0;
-
 void loop(){
- WiFiClient client = server.available();   // listen for incoming clients
-
-  if (client) {                             // if you get a client,
-    Serial.println("New Client.");           // print a message out the serial port
-    String currentLine = "";                // make a String to hold incoming data from the client
-    while (client.connected()) {            // loop while the client's connected
-      if (client.available()) {             // if there's bytes to read from the client,
-        char c = client.read();             // read a byte, then
-        Serial.write(c);                    // print it out the serial monitor
-        if (c == '\n') {                    // if the byte is a newline character
-
-          // if the current line is blank, you got two newline characters in a row.
-          // that's the end of the client HTTP request, so send a response:
-          if (currentLine.length() == 0) {
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println();
-
-            // the content of the HTTP response follows the header:
-            client.print("Click <a href=\"/H\">here</a> to turn the LED on pin 5 on.<br>");
-            client.print("Click <a href=\"/L\">here</a> to turn the LED on pin 5 off.<br>");
-
-            // The HTTP response ends with another blank line:
-            client.println();
-            // break out of the while loop:
-            break;
-          } else {    // if you got a newline, then clear currentLine:
-            currentLine = "";
-          }
-        } else if (c != '\r') {  // if you got anything else but a carriage return character,
-          currentLine += c;      // add it to the end of the currentLine
-        }
-
-        // Check to see if the client request was "GET /H" or "GET /L":
-        if (currentLine.endsWith("GET /H")) {
-          digitalWrite(LED ,HIGH);//turn the led on (voltage high)
-          delay(100);
-        }
-        if (currentLine.endsWith("GET /L")) {
-        digitalWrite(LED ,LOW);//turn the led off (voltage low)     
-          delay(100);
-        }
-      }
-    }
-    // close the connection:
-    client.stop();
-    Serial.println("Client Disconnected.");
+ server.handleClient();
   }
+  void getLEDState()
+  {toggleLED();
+  String led-state=digitalRead(LED)? "OFF":"ON";
+  server.send(200,"text/plain",led_state);}
 }
+void toggleLED()
+{
+  digitalWriter(LED,!digital|Read(LED))
+  server.send_P(200."text/html",webpage)}
