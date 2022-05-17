@@ -1,155 +1,127 @@
+/*********
+  Rui Santos
+  Complete project details at https://RandomNerdTutorials.com/esp32-web-server-slider-pwm/
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files.
+  
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+*********/
+
+// Import required libraries
 #include <WiFi.h>
-#include <WebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
-const char* ssid     = "Redmi9C";
-const char* password = "Redmi9CC";
+// Replace with your network credentials
+const char* ssid = "Hostels Wi-Fi";
+const char* password = "";
 
-WiFiServer server(80);
-//led on esp32
-int LED=2;
- // put your setup code here, to run once:
-char webpage[] PROGRAM=R"=====(
+const int output = 18;
 
-<!DOCTYPE html>
-<html>
+String sliderValue = "0";
+
+// setting PWM properties
+const int freq = 5000;
+const int ledChannel = 0;
+const int resolution = 8;
+
+const char* PARAM_INPUT = "value";
+
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
 <head>
-<meta charset="ISO-8859-1">
-<title>How To Play Video Audio In Html5 Example</title>
-<script type="text/javascript" > var audioElementId = 'audio1';
-    var audioFileURLId = 'audioFileURL';
-    var playAudioBtnId = 'playAudioBtn';
-    var pauseAudioBtnId = 'pauseAudioBtn';
-    var stopAudioBtnId = 'stopAudioBtn';
-    var outputElementId = 'output1';
-    function initialize(){
-        initialize_video();
-        initialize_audio();
-        
-    }function initialize_audio(){
-        audioElement = document.getElementById(audioElementId);
-        audioElement.style.display = 'none';
-        outputElement = document.getElementById(outputElementId);
-        audioElement.addEventListener("ended", function(){
-            message = "Play audio finish.";
-            alert(message);
-            outputElement.value = message;
-        });
-        // Add time update event listener.
-        audioElement.addEventListener("timeupdate", function(){
-            var audioPlayStatus = "Playing ";
-            var audioPlayTime = audioElement.currentTime;
-            var audioDuration = audioElement.duration;
-            audioPlayStatus += Math.floor(audioPlayTime) + ' seconds / Total ' + Math.floor(audioDuration) +' seconds'
-                
-            outputElement.value = audioPlayStatus;
-        
-        });
-        
-        playAudioBtnElement = document.getElementById(playAudioBtnId);
-        playAudioBtnElement.disabled = false;
-        pauseAudioBtnElement = document.getElementById(pauseAudioBtnId);
-        pauseAudioBtnElement.disabled = true;
-        stopAudioBtnElement = document.getElementById(stopAudioBtnId);
-        stopAudioBtnElement.disabled = true;
-    }
-    
-    function playAudio(src){
-        //https://dev2qa.com/demo/media/test.mp3
-        audioFileURLInput = document.getElementById(audioFileURLId);
-        audioFileURLStr = audioFileURLInput.value;
-        if('' == audioFileURLStr){
-            alert('Please input audio file URL first.');
-        }else{
-            document.getElementById("demo").innerHTML = "Audio Played" ;
-            audioElement = document.getElementById(audioElementId);
-            audioElement.style.display = 'block';
-            audioElement.src = audioFileURLStr;
-            audioElement.play();
-            outputElement = document.getElementById(outputElementId);
-            outputElement.style.display = 'block';
-            src.disabled = true;
-            pauseAudioBtnElement = document.getElementById(pauseAudioBtnId);
-            pauseAudioBtnElement.disabled = false;
-            stopAudioBtnElement = document.getElementById(stopAudioBtnId);
-            stopAudioBtnElement.disabled = false;
-        }
-    }
-    function pauseAudio(src){
-        audioElement = document.getElementById(audioElementId);
-        btnText = src.value.toLowerCase();
-        if(btnText == 'pause audio'){
-            document.getElementById("demo").innerHTML = "Audio Paused" ;
-            audioElement.pause();
-            src.value = 'Continue Audio';
-        }else if(btnText == 'continue audio'){
-            document.getElementById("demo").innerHTML = "Audio Played" ;
-            audioElement.play();
-            src.value = 'Pause Audio';
-        }
-    }
-    </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP Web Server</title>
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    h2 {font-size: 2.3rem;}
+    p {font-size: 1.9rem;}
+    body {max-width: 400px; margin:0px auto; padding-bottom: 25px;}
+    .slider { -webkit-appearance: none; margin: 14px; width: 360px; height: 25px; background: #FFD65C;
+      outline: none; -webkit-transition: .2s; transition: opacity .2s;}
+    .slider::-webkit-slider-thumb {-webkit-appearance: none; appearance: none; width: 35px; height: 35px; background: #003249; cursor: pointer;}
+    .slider::-moz-range-thumb { width: 35px; height: 35px; background: #003249; cursor: pointer; } 
+  </style>
 </head>
-<body onload="initialize()">
-<h3>How To Play Video Audio In Html5 Example.</h3>
-<div style="display:block;margin-top: 10px;">
-    <label>Input Audio File URL:</label>
-    <input type="text" id="audioFileURL"/>
-    <input type="button" id="playAudioBtn" value="Play Audio" onclick=playAudio(this) />
-    <input type="button" id="pauseAudioBtn" value="Pause Audio" onclick=pauseAudio(this) />
-</div>
-<output id="output2" style="display:block;margin-top: 10px;"></output>
-<audio id="audio1" style="display:block;margin-top: 10px;" controls></audio>
-<p id="demo"></p>
+<body>
+  <h2>ESP Web Server</h2>
+  <p><span id="textSliderValue">%SLIDERVALUE%</span></p>
+  <p><input type="range" onchange="updateSliderPWM(this)" id="pwmSlider" min="0" max="255" value="%SLIDERVALUE%" step="1" class="slider"></p>
+<script>
+function updateSliderPWM(element) {
+  var sliderValue = document.getElementById("pwmSlider").value;
+  document.getElementById("textSliderValue").innerHTML = sliderValue;
+  console.log(sliderValue);
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "/slider?value="+sliderValue, true);
+  xhr.send();
+}
+</script>
 </body>
 </html>
-)=====";
-void setup()
-{
-  pinMode(LED ,OUTPUT);
-  Wifi.begin(ssid,password);
-    Serial.begin(115200);
-    while(WiFi.status()!=WL_CONNECTED)
-    {
-     delay(500);}
-     
-  //set the led on esp32 as output
-pinMode(LED ,OUTPUT);
-    delay(10);
+)rawliteral";
 
-    // We start by connecting to a WiFi network
-
-    Serial.println();
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-
-    WiFi.begin(ssid, password);
-
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    Serial.println("");
-    Serial.println("WiFi connected.");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-    
-    server.on("/",[](){server.send(200,"text/html",webpage);});
-  server.on("/ledstate",getLEDState);
-    server.begin();
-
-}
-
-void loop(){
- server.handleClient();
+// Replaces placeholder with button section in your web page
+String processor(const String& var){
+  //Serial.println(var);
+  if (var == "SLIDERVALUE"){
+    return sliderValue;
   }
-  void getLEDState()
-  {toggleLED();
-  String led-state=digitalRead(LED)? "OFF":"ON";
-  server.send(200,"text/plain",led_state);}
+  return String();
 }
-void toggleLED()
-{
-  digitalWriter(LED,!digital|Read(LED))
-  server.send_P(200."text/html",webpage)}
+
+void setup(){
+  // Serial port for debugging purposes
+  Serial.begin(115200);
+  
+  // configure LED PWM functionalitites
+  ledcSetup(ledChannel, freq, resolution);
+  
+  // attach the channel to the GPIO to be controlled
+  ledcAttachPin(output, ledChannel);
+  
+  ledcWrite(ledChannel, sliderValue.toInt());
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+
+  // Print ESP Local IP Address
+  Serial.println(WiFi.localIP());
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html, processor);
+  });
+
+  // Send a GET request to <ESP_IP>/slider?value=<inputMessage>
+  server.on("/slider", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    // GET input1 value on <ESP_IP>/slider?value=<inputMessage>
+    if (request->hasParam(PARAM_INPUT)) {
+      inputMessage = request->getParam(PARAM_INPUT)->value();
+      sliderValue = inputMessage;
+      ledcWrite(ledChannel, sliderValue.toInt());
+    }
+    else {
+      inputMessage = "No message sent";
+    }
+    Serial.println(inputMessage);
+    request->send(200, "text/plain", "OK");
+  });
+  
+  // Start server
+  server.begin();
+}
+  
+void loop() {
+  
+}
