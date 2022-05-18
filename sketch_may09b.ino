@@ -1,127 +1,182 @@
-/*********
+/* 
   Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp32-web-server-slider-pwm/
+  Complete project details at https://RandomNerdTutorials.com/esp32-web-server-websocket-sliders/
   
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files.
   
   The above copyright notice and this permission notice shall be included in all
   copies or substantial portions of the Software.
-*********/
+*/
 
-// Import required libraries
+#include <Arduino.h>
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include "SPIFFS.h"
+#include <Arduino_JSON.h>
 
 // Replace with your network credentials
 const char* ssid = "Hostels Wi-Fi";
 const char* password = "";
 
-const int output = 18;
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
+// Create a WebSocket object
 
-String sliderValue = "0";
+AsyncWebSocket ws("/ws");
+// Set LED GPIO
+const int ledPin1 = 2;
+const int ledPin2 = 5;
+const int ledPin3 = 18;
+
+String message = "";
+String sliderValue1 = "0";
+String sliderValue2 = "0";
+String sliderValue3 = "0";
+
+int dutyCycle1;
+int dutyCycle2;
+int dutyCycle3;
 
 // setting PWM properties
 const int freq = 5000;
-const int ledChannel = 0;
+const int ledChannel1 = 0;
+const int ledChannel2 = 1;
+const int ledChannel3 = 2;
+
 const int resolution = 8;
 
-const char* PARAM_INPUT = "value";
+//Json Variable to Hold Slider Values
+JSONVar sliderValues;
 
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
+//Get Slider Values
+String getSliderValues(){
+  sliderValues["sliderValue1"] = String(sliderValue1);
+  sliderValues["sliderValue2"] = String(sliderValue2);
+  sliderValues["sliderValue3"] = String(sliderValue3);
 
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ESP Web Server</title>
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    h2 {font-size: 2.3rem;}
-    p {font-size: 1.9rem;}
-    body {max-width: 400px; margin:0px auto; padding-bottom: 25px;}
-    .slider { -webkit-appearance: none; margin: 14px; width: 360px; height: 25px; background: #FFD65C;
-      outline: none; -webkit-transition: .2s; transition: opacity .2s;}
-    .slider::-webkit-slider-thumb {-webkit-appearance: none; appearance: none; width: 35px; height: 35px; background: #003249; cursor: pointer;}
-    .slider::-moz-range-thumb { width: 35px; height: 35px; background: #003249; cursor: pointer; } 
-  </style>
-</head>
-<body>
-  <h2>ESP Web Server</h2>
-  <p><span id="textSliderValue">%SLIDERVALUE%</span></p>
-  <p><input type="range" onchange="updateSliderPWM(this)" id="pwmSlider" min="0" max="255" value="%SLIDERVALUE%" step="1" class="slider"></p>
-<script>
-function updateSliderPWM(element) {
-  var sliderValue = document.getElementById("pwmSlider").value;
-  document.getElementById("textSliderValue").innerHTML = sliderValue;
-  console.log(sliderValue);
-  var xhr = new XMLHttpRequest();
-  xhr.open("GET", "/slider?value="+sliderValue, true);
-  xhr.send();
+  String jsonString = JSON.stringify(sliderValues);
+  return jsonString;
 }
-</script>
-</body>
-</html>
-)rawliteral";
 
-// Replaces placeholder with button section in your web page
-String processor(const String& var){
-  //Serial.println(var);
-  if (var == "SLIDERVALUE"){
-    return sliderValue;
+// Initialize SPIFFS
+void initFS() {
+  if (!SPIFFS.begin()) {
+    Serial.println("An error has occurred while mounting SPIFFS");
   }
-  return String();
+  else{
+   Serial.println("SPIFFS mounted successfully");
+  }
 }
 
-void setup(){
-  // Serial port for debugging purposes
-  Serial.begin(115200);
-  
-  // configure LED PWM functionalitites
-  ledcSetup(ledChannel, freq, resolution);
-  
-  // attach the channel to the GPIO to be controlled
-  ledcAttachPin(output, ledChannel);
-  
-  ledcWrite(ledChannel, sliderValue.toInt());
-
-  // Connect to Wi-Fi
+// Initialize WiFi
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
   while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
     delay(1000);
-    Serial.println("Connecting to WiFi..");
   }
-
-  // Print ESP Local IP Address
   Serial.println(WiFi.localIP());
+}
 
-  // Route for root / web page
+void notifyClients(String sliderValues) {
+  ws.textAll(sliderValues);
+}
+
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+  AwsFrameInfo *info = (AwsFrameInfo*)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+    data[len] = 0;
+    message = (char*)data;
+    if (message.indexOf("1s") >= 0) {
+      sliderValue1 = message.substring(2);
+      dutyCycle1 = map(sliderValue1.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle1);
+      Serial.print(getSliderValues());
+      notifyClients(getSliderValues());
+    }
+    if (message.indexOf("2s") >= 0) {
+      sliderValue2 = message.substring(2);
+      dutyCycle2 = map(sliderValue2.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle2);
+      Serial.print(getSliderValues());
+      notifyClients(getSliderValues());
+    }    
+    if (message.indexOf("3s") >= 0) {
+      sliderValue3 = message.substring(2);
+      dutyCycle3 = map(sliderValue3.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle3);
+      Serial.print(getSliderValues());
+      notifyClients(getSliderValues());
+    }
+    if (strcmp((char*)data, "getValues") == 0) {
+      notifyClients(getSliderValues());
+    }
+  }
+}
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      break;
+    case WS_EVT_DISCONNECT:
+      Serial.printf("WebSocket client #%u disconnected\n", client->id());
+      break;
+    case WS_EVT_DATA:
+      handleWebSocketMessage(arg, data, len);
+      break;
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
+      break;
+  }
+}
+
+void initWebSocket() {
+  ws.onEvent(onEvent);
+  server.addHandler(&ws);
+}
+
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ledPin1, OUTPUT);
+  pinMode(ledPin2, OUTPUT);
+  pinMode(ledPin3, OUTPUT);
+  initFS();
+  initWiFi();
+
+  // configure LED PWM functionalitites
+  ledcSetup(ledChannel1, freq, resolution);
+  ledcSetup(ledChannel2, freq, resolution);
+  ledcSetup(ledChannel3, freq, resolution);
+
+  // attach the channel to the GPIO to be controlled
+  ledcAttachPin(ledPin1, ledChannel1);
+  ledcAttachPin(ledPin2, ledChannel2);
+  ledcAttachPin(ledPin3, ledChannel3);
+
+
+  initWebSocket();
+  
+  // Web Server Root URL
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", index_html, processor);
-  });
-
-  // Send a GET request to <ESP_IP>/slider?value=<inputMessage>
-  server.on("/slider", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String inputMessage;
-    // GET input1 value on <ESP_IP>/slider?value=<inputMessage>
-    if (request->hasParam(PARAM_INPUT)) {
-      inputMessage = request->getParam(PARAM_INPUT)->value();
-      sliderValue = inputMessage;
-      ledcWrite(ledChannel, sliderValue.toInt());
-    }
-    else {
-      inputMessage = "No message sent";
-    }
-    Serial.println(inputMessage);
-    request->send(200, "text/plain", "OK");
+    request->send(SPIFFS, "/index.html", "text/html");
   });
   
+  server.serveStatic("/", SPIFFS, "/");
+
   // Start server
   server.begin();
+
 }
-  
+
 void loop() {
-  
+  ledcWrite(ledChannel1, dutyCycle1);
+  ledcWrite(ledChannel2, dutyCycle2);
+  ledcWrite(ledChannel3, dutyCycle3);
+
+  ws.cleanupClients();
 }
