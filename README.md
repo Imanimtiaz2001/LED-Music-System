@@ -1,4 +1,2 @@
 # LED-Music-System
-This is an arduino project which is made on esp32(micro controller). 
-This system will control the blinking of LEDs with the help of different notes and frequencies of music by making the voltage high or low.
-You can connect the music device directly or via blutooth or wifi with esp32.
+It is an Arduino project made on ESP32(micro controller) in which there is a Music integrated light system. The blinking of LEDS is controlled according to different notes and frequencies of music by making the voltage low or high. It is controlled with the help of web server. Its hardware coding is done on Arduino IDE and web server is made with the help of html and CSS.  The music device can be connected directly or via Bluetooth or Wi-Fi with Esp32.
